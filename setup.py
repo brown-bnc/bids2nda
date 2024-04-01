@@ -14,10 +14,10 @@ setup(
     description="Command line tool generating NDA compatible description from a Brain Imaging Data Structure "
                 "compatible dataset.",
     long_description="Command line tool generating NDA compatible description from a Brain Imaging Data Structure "
-                     "compatible dataset.",
+                     "compatible dataset. An extension of the bids2nda tool from https://github.com/bids-standard/bids2nda",
 
     # The project URL.
-    url='https://github.com/INCF/BIDS2NDA',
+    url='https://github.com/brown-bnc/bids2nda',
 
     # Choose your license
     license='BSD',
