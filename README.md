@@ -11,7 +11,7 @@ Extract NIMH Data Archive compatible metadata from Brain Imaging Data Structure 
 
 ## Usage
 
-    usage: bids2nda [-h] [-e] BIDS_DIRECTORY GUID_MAPPING OUTPUT_DIRECTORY
+    usage: bids2nda [-h] [-e EXPID_MAPPING] BIDS_DIRECTORY GUID_MAPPING OUTPUT_DIRECTORY
 
     BIDS to NDA converter.
 
