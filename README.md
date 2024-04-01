@@ -4,12 +4,12 @@ Extract NIMH Data Archive compatible metadata from Brain Imaging Data Structure 
 ## Installation
 
 
-    pip install https://github.com/INCF/BIDS2NDA/archive/master.zip
+    pip install https://github.com/brown-bnc/bids2nda/archive/master.zip
 
 
 ## Usage
 
-    usage: bids2nda [-h] [-v] BIDS_DIRECTORY GUID_MAPPING OUTPUT_DIRECTORY
+    usage: bids2nda [-h] [-e] BIDS_DIRECTORY GUID_MAPPING OUTPUT_DIRECTORY
 
     BIDS to NDA converter.
 
