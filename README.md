@@ -23,6 +23,7 @@ Extract NIMH Data Archive compatible metadata from Brain Imaging Data Structure 
 
     optional arguments:
       -h, --help        Show this help message and exit.
+      -e EXPID_MAPPING  Path to a text file with experiment name to NDA experiment ID mapping.
 
 
 ## GUID_MAPPING file format
@@ -30,9 +31,13 @@ The is the file format produced by the GUID Tool, one line per subject in the fo
 
 `<participant_id> - <GUID>`
 
+## EXPID_MAPPING file format
+This is a text file with one line per task present in the dataset in the format:
+
+`<BIDS task name> - <NDA experiment ID number>`
+The BIDS task name should match the value associated with the "task-" key in the .nii filename
+The NDA experiment ID number(s) are received from NDA after setting the study up through the NDA website [here](https://ndar.nih.gov/user/dashboard/collections.html).
+
 ## Example outputs
 See [/examples](/examples)
 
-## Notes:
-Column `'experiment_id'` must be manually filled in for now.
-This is based on experiment IDs received from NDA after setting the study up through the NDA website [here](https://ndar.nih.gov/user/dashboard/collections.html).

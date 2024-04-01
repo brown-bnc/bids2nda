@@ -127,6 +127,10 @@ def cosine_to_orientation(iop):
 def run(args):
 
     guid_mapping = dict([line.split(" - ") for line in open(args.guid_mapping).read().split("\n") if line != ''])
+    if args.expid_mapping:
+        expid_mapping = dict([line.split(" - ") for line in open(args.expid_mapping).read().split("\n") if line != ''])
+    else:
+        expid_mapping = False
 
     suffix_to_scan_type = {"dwi": "MR diffusion",
                            "bold": "fMRI",
@@ -191,7 +195,7 @@ def run(args):
                 break
 
         sdate = date.split("-")
-        ndar_date = sdate[1] + "/" + sdate[2].split("T")[0] + "/" + sdate[0]
+        ndar_date = sdate[1].zfill(2) + "/" + sdate[2].split("T")[0] + "/" + sdate[0]
         dict_append(image03_dict, 'interview_date', ndar_date)
 
         interview_age = int(round(list(participants_df[participants_df.participant_id == "sub-" + sub].age)[0]*12, 0))
@@ -204,11 +208,23 @@ def run(args):
 
         suffix = file.split("_")[-1].split(".")[0]
         if suffix == "bold":
-            description = suffix + " " + metadata["TaskName"]
-            dict_append(image03_dict, 'experiment_id', metadata.get("ExperimentID", ""))
+            # description = suffix + " " + metadata["TaskName"]
+            if "_task-" in file:
+                task_name = file.split("_task-")[1].split("_")[0]
+            else:
+                task_name = metadata["TaskName"]
+            description = suffix + " " + task_name
+            if expid_mapping:
+                dict_append(image03_dict, 'experiment_id', expid_mapping[task_name])
+            else:
+                dict_append(image03_dict, 'experiment_id', "")
+            dict_append(image03_dict, 'taskname', task_name)
         else:
             description = suffix
-            dict_append(image03_dict, 'experiment_id', '')
+            dict_append(image03_dict, 'experiment_id', "")
+            dict_append(image03_dict, 'taskname', "")
+        dict_append(image03_dict, 'abbrev_taskname', "")
+
         # Shortcut for the global.const section -- apparently might not be flattened fully
         metadata_const = metadata.get('global', {}).get('const', {})
         dict_append(image03_dict, 'image_description', description)
@@ -307,12 +323,19 @@ def run(args):
                 if suffix == "bold":
                     #TODO write a more robust function for finding those files
                     events_file = file.split("_bold")[0] + "_events.tsv"
-                    arch_name = os.path.split(events_file)[1]
+                    arch_name = os.path.split(events_file)[1]                        
+
                     if not os.path.exists(events_file):
-                        task_name = file.split("_task-")[1].split("_")[0]
                         events_file = os.path.join(args.bids_directory, "task-" + task_name + "_events.tsv")
 
                     if os.path.exists(events_file):
+                        events_df = pd.read_csv(events_file, header=0, sep="\t")
+                        if "stim_file" in events_df.columns:
+                            for stim_filename in events_df.stim_file.unique().tolist():
+                                stim_file = os.path.join(args.bids_directory, "stimuli",stim_filename)
+                                if os.path.exists(stim_file):
+                                    arc_name = os.path.split(stim_file)[-1]
+                                    zipf.write(stim_file, arc_name)
                         zipf.write(events_file, arch_name)
 
             dict_append(image03_dict, 'data_file2', os.path.join(args.output_directory, zip_name))
@@ -350,7 +373,7 @@ def run(args):
             dict_append(image03_dict, 'bvalfile', "")
             dict_append(image03_dict, 'bvek_bval_files', "")
 
-        # comply with image03 changes from 12/30/19
+        # comply with image03 changes from 11/15/2023
         # https://nda.nih.gov/data_structure_history.html?short_name=image03
         
         dict_append(image03_dict, 'deviceserialnumber', "")
@@ -384,12 +407,75 @@ def run(args):
         dict_append(image03_dict, 'slice_number', "")
         dict_append(image03_dict, 'slice_thickness', "")
         dict_append(image03_dict, 'type_of_microscopy', "")
+        dict_append(image03_dict, 'comments_misc', "")
+        dict_append(image03_dict, 'image_thumbnail_file', "")
+        dict_append(image03_dict, 'transmit_coil', "")
+        dict_append(image03_dict, 'image_history', "")
+        dict_append(image03_dict, 'qc_outcome', "")
+        dict_append(image03_dict, 'qc_description', "")
+        dict_append(image03_dict, 'qc_fail_quest_reason', "")
+        dict_append(image03_dict, 'decay_correction', "")
+        dict_append(image03_dict, 'frame_end_times', "")
+        dict_append(image03_dict, 'frame_end_unit', "")
+        dict_append(image03_dict, 'frame_start_times', "")
+        dict_append(image03_dict, 'frame_start_unit', "")
+        dict_append(image03_dict, 'pet_isotope', "")
+        dict_append(image03_dict, 'pet_tracer', "")
+        dict_append(image03_dict, 'time_diff_inject_to_image', "")
+        dict_append(image03_dict, 'time_diff_units', "")
+        dict_append(image03_dict, 'pulse_seq', "")
+        dict_append(image03_dict, 'slice_acquisition', "")
+        dict_append(image03_dict, 'software_preproc', "")
+        dict_append(image03_dict, 'study', "")
+        dict_append(image03_dict, 'week', "")
+        dict_append(image03_dict, 'experiment_description', "")
+        dict_append(image03_dict, 'year_mta', "")
+        dict_append(image03_dict, 'timepoint_label', "")
+        dict_append(image03_dict, 'aqi', "")
+        dict_append(image03_dict, 'fd_mean', "")
+        dict_append(image03_dict, 'dvars_std', "")
+        dict_append(image03_dict, 'tsnr', "")
+        dict_append(image03_dict, 'fetal_age', "")
+        dict_append(image03_dict, 'fetal_age_type', "")
+        dict_append(image03_dict, 'accession_number', "")
+        dict_append(image03_dict, 'ageyears', "")
+        dict_append(image03_dict, 'iti_onset', "")
+        dict_append(image03_dict, 'stim1', "")
+        dict_append(image03_dict, 'stim2', "")
+        dict_append(image03_dict, 'stim1_side', "")
+        dict_append(image03_dict, 'stim1_magnitude', "")
+        dict_append(image03_dict, 'stim2_magnitude', "")
+        dict_append(image03_dict, 'choice_side', "")
+        dict_append(image03_dict, 'computer_choice', "")
+        dict_append(image03_dict, 'stim1_outcome', "")
+        dict_append(image03_dict, 'session_fmri', "")
+        dict_append(image03_dict, 'choice_fmri', "")
+        dict_append(image03_dict, 'outcome_fmri', "")
+        dict_append(image03_dict, 'rt_fmri', "")
+        dict_append(image03_dict, 'task__version', "")
+        dict_append(image03_dict, 'block_sv', "")
+        dict_append(image03_dict, 'trial_num', "")
+        dict_append(image03_dict, 'options_onset', "")
+        dict_append(image03_dict, 'cue_onset', "")
+        dict_append(image03_dict, 'interval_onset', "")
+        dict_append(image03_dict, 'monitor_onset', "")
+        dict_append(image03_dict, 'session_det', "")
+        dict_append(image03_dict, 'gbc', "")
+        dict_append(image03_dict, 'vtca', "")
+        dict_append(image03_dict, 'vtcan', "")
+        dict_append(image03_dict, 'eventname', "")
+        dict_append(image03_dict, 'vendor', "")
+        dict_append(image03_dict, 'image_extent5', "")
+        dict_append(image03_dict, 'extent5_type', "")
+        dict_append(image03_dict, 'image_unit5', "")
+        dict_append(image03_dict, 'image_resolution5', "")
+        dict_append(image03_dict, 'excitation_wavelength', "")
 
     image03_df = pd.DataFrame(image03_dict)
 
-    with open(os.path.join(args.output_directory, "image03.txt"), "w") as out_fp:
-        out_fp.write('"image"\t"3"\n')
-        image03_df.to_csv(out_fp, sep="\t", index=False, quoting=csv.QUOTE_ALL)
+    with open(os.path.join(args.output_directory, "image03.csv"), "w") as out_fp:
+        out_fp.write('"image","3"\n')
+        image03_df.to_csv(out_fp, index=False, quoting=csv.QUOTE_ALL, encoding='utf-8')
 
 def main():
     class MyParser(argparse.ArgumentParser):
@@ -399,9 +485,8 @@ def main():
             sys.exit(2)
 
     parser = MyParser(
-        description="BIDS to NDA converter.",
+        description="BIDS to NDA converter, adapted from https://github.com/bids-standard/bids2nda/tree/master.",
         fromfile_prefix_chars='@')
-    # TODO Specify your real parameters here.
     parser.add_argument(
         "bids_directory",
         help="Location of the root of your BIDS compatible directory",
@@ -415,6 +500,11 @@ def main():
         "output_directory",
         help="Directory where NDA files will be stored",
         metavar="OUTPUT_DIRECTORY")
+    parser.add_argument(
+        "-e",
+        metavar="EXPID_MAPPING",
+        help="Path to a text file with experiment name to NDA experiment ID mapping.",
+        required=False)
     args = parser.parse_args()
 
     run(args)
