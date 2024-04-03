@@ -127,7 +127,7 @@ def cosine_to_orientation(iop):
 def run(args):
 
     guid_mapping = dict([line.split(" - ") for line in open(args.guid_mapping).read().split("\n") if line != ''])
-    if args.expid_mapping:
+    if args.expid_mapping is not None:
         expid_mapping = dict([line.split(" - ") for line in open(args.expid_mapping).read().split("\n") if line != ''])
     else:
         expid_mapping = False
@@ -501,7 +501,7 @@ def main():
         help="Directory where NDA files will be stored",
         metavar="OUTPUT_DIRECTORY")
     parser.add_argument(
-        "-e",
+        "-e","--expid_mapping",
         metavar="EXPID_MAPPING",
         help="Path to a text file with experiment name to NDA experiment ID mapping.",
         required=False)
