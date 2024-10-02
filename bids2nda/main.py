@@ -68,7 +68,21 @@ def get_metadata_for_nifti(bids_root, path):
     return merged_param_dict
 
 
-def dict_append(d, key, value):
+def dict_append(d, guid,lookup_fields,lookup_df,key, value):
+    #if this key is one we were supposed to grab from the lookup csv file
+    if key in lookup_fields:
+        imported_value = np.unique(lookup_df[lookup_df['subjectkey']==guid][key])
+        if len(imported_value)==0:
+            print(f"Did not find any {key} values for {guid} in lookup csv. You will need to fill it in manually.")
+            value = ''
+        elif len(imported_value)>1:
+            print(f"More than one {key} value for {guid} in lookup csv. You will need to fill it in manually.")
+            value = ''
+        else:
+            print(f"Participant {guid}: Overwriting BIDS {key} {value} with {imported_value[0].astype(type(value))} from lookup csv.")
+            value = imported_value[0].astype(type(value)) #make sure the data we're inserting is the correct type
+        if value!=value:
+            print(f"Populated {key} value for {guid} is nan. Verify that this is correct.")
     if key in d:
         d[key].append(value)
     else:
@@ -131,6 +145,30 @@ def run(args):
         expid_mapping = dict([line.split(" - ") for line in open(args.expid_mapping).read().split("\n") if line != ''])
     else:
         expid_mapping = False
+    
+    if (args.lookup_csv is not None) and (args.lookup_fields is not None): #if we have both a lookup csv and fields to grab
+        #read lookup csv
+        lookup_df = pd.read_csv(args.lookup_csv,header=0)
+        lookup_fields = args.lookup_fields
+        missing_fields = []
+        for field in lookup_fields:
+            if field not in lookup_df.columns:
+                missing_fields.append(field)
+        if len(missing_fields) > 0:
+            missing_fields = []
+            lookup_df = pd.read_csv(args.lookup_csv,header=1)
+            for field in lookup_fields:
+                if field not in lookup_df.columns:
+                    missing_fields.append(field)
+            if len(missing_fields) > 0:
+                raise RuntimeError(f"Could not find these fields in the lookup csv: {' '.join(missing_fields)}")
+    elif (args.lookup_csv is not None) and (args.lookup_fields is None):
+        raise RuntimeError('If a lookup csv is provided, you need to provide a field or list of fields to grab')
+    elif (args.lookup_csv is None) and (args.lookup_fields is not None):
+        raise RuntimeError('If you specify the field(s) to grab, you must provide a lookup csv (i.e. ndar_subject01.csv)')
+    else:
+        lookup_fields = []
+        lookup_df = []
 
     suffix_to_scan_type = {"dwi": "MR diffusion",
                            "bold": "fMRI",
@@ -174,8 +212,9 @@ def run(args):
         metadata = get_metadata_for_nifti(args.bids_directory, file)
 
         bids_subject_id = os.path.split(file)[-1].split("_")[0][4:]
-        dict_append(image03_dict, 'subjectkey', guid_mapping[bids_subject_id])
-        dict_append(image03_dict, 'src_subject_id', bids_subject_id)
+        guid = guid_mapping[bids_subject_id]
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'subjectkey', guid)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'src_subject_id', bids_subject_id)
 
         sub = file.split("sub-")[-1].split("_")[0]
         if "ses-" in file:
@@ -196,15 +235,15 @@ def run(args):
 
         sdate = date.split("-")
         ndar_date = sdate[1].zfill(2) + "/" + sdate[2].split("T")[0] + "/" + sdate[0]
-        dict_append(image03_dict, 'interview_date', ndar_date)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'interview_date', ndar_date)
 
         interview_age = int(round(list(participants_df[participants_df.participant_id == "sub-" + sub].age)[0]*12, 0))
-        dict_append(image03_dict, 'interview_age', interview_age)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'interview_age', interview_age)
 
         sex = list(participants_df[participants_df.participant_id == "sub-" + sub].sex)[0]
-        dict_append(image03_dict, 'gender', sex)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'gender', sex)
 
-        dict_append(image03_dict, 'image_file', file)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_file', file)
 
         suffix = file.split("_")[-1].split(".")[0]
         if suffix == "bold":
@@ -215,30 +254,30 @@ def run(args):
                 task_name = metadata["TaskName"]
             description = suffix + " " + task_name
             if expid_mapping:
-                dict_append(image03_dict, 'experiment_id', expid_mapping[task_name])
+                dict_append(image03_dict,guid,lookup_fields,lookup_df, 'experiment_id', expid_mapping[task_name])
             else:
-                dict_append(image03_dict, 'experiment_id', "")
-            dict_append(image03_dict, 'taskname', task_name)
+                dict_append(image03_dict,guid,lookup_fields,lookup_df, 'experiment_id', "")
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'taskname', task_name)
         else:
             description = suffix
-            dict_append(image03_dict, 'experiment_id', "")
-            dict_append(image03_dict, 'taskname', "")
-        dict_append(image03_dict, 'abbrev_taskname', "")
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'experiment_id', "")
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'taskname', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'abbrev_taskname', "")
 
         # Shortcut for the global.const section -- apparently might not be flattened fully
         metadata_const = metadata.get('global', {}).get('const', {})
-        dict_append(image03_dict, 'image_description', description)
-        dict_append(image03_dict, 'scan_type', suffix_to_scan_type[suffix])
-        dict_append(image03_dict, 'scan_object', "Live")
-        dict_append(image03_dict, 'image_file_format', "NIFTI")
-        dict_append(image03_dict, 'image_modality', "MRI")
-        dict_append(image03_dict, 'scanner_manufacturer_pd', metadata.get("Manufacturer", ""))
-        dict_append(image03_dict, 'scanner_type_pd', metadata.get("ManufacturersModelName", ""))
-        dict_append(image03_dict, 'scanner_software_versions_pd', metadata.get("SoftwareVersions", ""))
-        dict_append(image03_dict, 'magnetic_field_strength', metadata.get("MagneticFieldStrength", ""))
-        dict_append(image03_dict, 'mri_echo_time_pd', metadata.get("EchoTime", ""))
-        dict_append(image03_dict, 'flip_angle', metadata.get("FlipAngle", ""))
-        dict_append(image03_dict, 'receive_coil', metadata.get("ReceiveCoilName", ""))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_description', description)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'scan_type', suffix_to_scan_type[suffix])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'scan_object', "Live")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_file_format', "NIFTI")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_modality', "MRI")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'scanner_manufacturer_pd', metadata.get("Manufacturer", ""))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'scanner_type_pd', metadata.get("ManufacturersModelName", ""))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'scanner_software_versions_pd', metadata.get("SoftwareVersions", ""))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'magnetic_field_strength', metadata.get("MagneticFieldStrength", ""))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'mri_echo_time_pd', metadata.get("EchoTime", ""))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'flip_angle', metadata.get("FlipAngle", ""))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'receive_coil', metadata.get("ReceiveCoilName", ""))
         # ImageOrientationPatientDICOM is populated by recent dcm2niix,
         # and ImageOrientationPatient might be provided by exhastive metadata
         # record done by heudiconv
@@ -246,22 +285,22 @@ def run(args):
             'ImageOrientationPatientDICOM',
             metadata_const.get("ImageOrientationPatient", None)
         )
-        dict_append(image03_dict, 'image_orientation', cosine_to_orientation(iop) if iop else '')
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_orientation', cosine_to_orientation(iop) if iop else '')
 
-        dict_append(image03_dict, 'transformation_performed', 'Yes')
-        dict_append(image03_dict, 'transformation_type', 'BIDS2NDA')
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'transformation_performed', 'Yes')
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'transformation_type', 'BIDS2NDA')
 
         nii = nb.load(file)
-        dict_append(image03_dict, 'image_num_dimensions', len(nii.shape))
-        dict_append(image03_dict, 'image_extent1', nii.shape[0])
-        dict_append(image03_dict, 'image_extent2', nii.shape[1])
-        dict_append(image03_dict, 'image_extent3', nii.shape[2])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_num_dimensions', len(nii.shape))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_extent1', nii.shape[0])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_extent2', nii.shape[1])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_extent3', nii.shape[2])
         if len(nii.shape) > 3:
             image_extent4 = nii.shape[3]
         else:
             image_extent4 = ""
 
-        dict_append(image03_dict, 'image_extent4', image_extent4)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_extent4', image_extent4)
         if suffix == "bold":
             extent4_type = "time"
         elif description == "epi" and len(nii.shape) == 4:
@@ -270,49 +309,49 @@ def run(args):
             extent4_type = "diffusion weighting"
         else:
             extent4_type = ""
-        dict_append(image03_dict, 'extent4_type', extent4_type)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'extent4_type', extent4_type)
 
-        dict_append(image03_dict, 'acquisition_matrix', "%g x %g" %(nii.shape[0], nii.shape[1]))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'acquisition_matrix', "%g x %g" %(nii.shape[0], nii.shape[1]))
 
-        dict_append(image03_dict, 'image_resolution1', nii.header.get_zooms()[0])
-        dict_append(image03_dict, 'image_resolution2', nii.header.get_zooms()[1])
-        dict_append(image03_dict, 'image_resolution3', nii.header.get_zooms()[2])
-        dict_append(image03_dict, 'image_slice_thickness', metadata_const.get("SliceThickness", nii.header.get_zooms()[2]))
-        dict_append(image03_dict, 'photomet_interpret', metadata.get("global",{}).get("const",{}).get("PhotometricInterpretation",""))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_resolution1', nii.header.get_zooms()[0])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_resolution2', nii.header.get_zooms()[1])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_resolution3', nii.header.get_zooms()[2])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_slice_thickness', metadata_const.get("SliceThickness", nii.header.get_zooms()[2]))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'photomet_interpret', metadata.get("global",{}).get("const",{}).get("PhotometricInterpretation",""))
         if len(nii.shape) > 3:
             image_resolution4 = nii.header.get_zooms()[3]
         else:
             image_resolution4 = ""
-        dict_append(image03_dict, 'image_resolution4', image_resolution4)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_resolution4', image_resolution4)
 
-        dict_append(image03_dict, 'image_unit1', units_dict[nii.header.get_xyzt_units()[0]])
-        dict_append(image03_dict, 'image_unit2', units_dict[nii.header.get_xyzt_units()[0]])
-        dict_append(image03_dict, 'image_unit3', units_dict[nii.header.get_xyzt_units()[0]])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_unit1', units_dict[nii.header.get_xyzt_units()[0]])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_unit2', units_dict[nii.header.get_xyzt_units()[0]])
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_unit3', units_dict[nii.header.get_xyzt_units()[0]])
         if len(nii.shape) > 3:
             image_unit4 = units_dict[nii.header.get_xyzt_units()[1]]
             if image_unit4 == "Milliseconds":
                 TR = nii.header.get_zooms()[3]/1000.
             else:
                 TR = nii.header.get_zooms()[3]
-            dict_append(image03_dict, 'mri_repetition_time_pd', TR)
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'mri_repetition_time_pd', TR)
         else:
             image_unit4 = ""
-            dict_append(image03_dict, 'mri_repetition_time_pd', metadata.get("RepetitionTime", ""))
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'mri_repetition_time_pd', metadata.get("RepetitionTime", ""))
 
-        dict_append(image03_dict, 'slice_timing', metadata.get("SliceTiming", ""))
-        dict_append(image03_dict, 'image_unit4', image_unit4)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'slice_timing', metadata.get("SliceTiming", ""))
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_unit4', image_unit4)
 
-        dict_append(image03_dict, 'mri_field_of_view_pd', "%g x %g %s" % (nii.header.get_zooms()[0],
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'mri_field_of_view_pd', "%g x %g %s" % (nii.header.get_zooms()[0],
                                                                           nii.header.get_zooms()[1],
                                                                           units_dict[nii.header.get_xyzt_units()[0]]))
-        dict_append(image03_dict, 'patient_position', 'head first-supine')
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'patient_position', 'head first-supine')
 
         if file.split(os.sep)[-1].split("_")[1].startswith("ses"):
             visit = file.split(os.sep)[-1].split("_")[1][4:]
         else:
             visit = ""
 
-        dict_append(image03_dict, 'visit', visit)
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'visit', visit)
 
         if len(metadata) > 0 or suffix in ['bold', 'dwi']:
             _, fname = os.path.split(file)
@@ -338,12 +377,12 @@ def run(args):
                                     zipf.write(stim_file, arc_name)
                         zipf.write(events_file, arch_name)
 
-            dict_append(image03_dict, 'data_file2', os.path.join(args.output_directory, zip_name))
-            dict_append(image03_dict, 'data_file2_type', "ZIP file with additional metadata from Brain Imaging "
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'data_file2', os.path.join(args.output_directory, zip_name))
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'data_file2_type', "ZIP file with additional metadata from Brain Imaging "
                                                                 "Data Structure (http://bids.neuroimaging.io)")
         else:
-            dict_append(image03_dict, 'data_file2', "")
-            dict_append(image03_dict, 'data_file2_type', "")
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'data_file2', "")
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'data_file2_type', "")
 
         if suffix == "dwi":
             # TODO write a more robust function for finding those files
@@ -352,124 +391,124 @@ def run(args):
                 bvec_file = os.path.join(args.bids_directory, "dwi.bvec")
 
             if os.path.exists(bvec_file):
-                dict_append(image03_dict, 'bvecfile', bvec_file)
+                dict_append(image03_dict,guid,lookup_fields,lookup_df, 'bvecfile', bvec_file)
             else:
-                dict_append(image03_dict, 'bvecfile', "")
+                dict_append(image03_dict,guid,lookup_fields,lookup_df, 'bvecfile', "")
 
             bval_file = file.split("_dwi")[0] + "_dwi.bval"
             if not os.path.exists(bval_file):
                 bval_file = os.path.join(args.bids_directory, "dwi.bval")
 
             if os.path.exists(bval_file):
-                dict_append(image03_dict, 'bvalfile', bval_file)
+                dict_append(image03_dict,guid,lookup_fields,lookup_df, 'bvalfile', bval_file)
             else:
-                dict_append(image03_dict, 'bvalfile', "")
+                dict_append(image03_dict,guid,lookup_fields,lookup_df, 'bvalfile', "")
             if os.path.exists(bval_file) or os.path.exists(bvec_file):
-                dict_append(image03_dict, 'bvek_bval_files', 'Yes')
+                dict_append(image03_dict,guid,lookup_fields,lookup_df, 'bvek_bval_files', 'Yes')
             else:
-                dict_append(image03_dict, 'bvek_bval_files', 'No')
+                dict_append(image03_dict,guid,lookup_fields,lookup_df, 'bvek_bval_files', 'No')
         else:
-            dict_append(image03_dict, 'bvecfile', "")
-            dict_append(image03_dict, 'bvalfile', "")
-            dict_append(image03_dict, 'bvek_bval_files', "")
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'bvecfile', "")
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'bvalfile', "")
+            dict_append(image03_dict,guid,lookup_fields,lookup_df, 'bvek_bval_files', "")
 
         # comply with image03 changes from 11/15/2023
         # https://nda.nih.gov/data_structure_history.html?short_name=image03
         
-        dict_append(image03_dict, 'deviceserialnumber', "")
-        dict_append(image03_dict, 'procdate', "")
-        dict_append(image03_dict, 'visnum', "")
-        dict_append(image03_dict, 'manifest', "")
-        dict_append(image03_dict, 'emission_wavelingth', "")
-        dict_append(image03_dict, 'objective_magnification', "")
-        dict_append(image03_dict, 'objective_na', "")
-        dict_append(image03_dict, 'immersion', "")
-        dict_append(image03_dict, 'exposure_time', "")
-        dict_append(image03_dict, 'camera_sn', "")
-        dict_append(image03_dict, 'block_number', "")
-        dict_append(image03_dict, 'level', "")
-        dict_append(image03_dict, 'cut_thickness', "")
-        dict_append(image03_dict, 'stain', "")
-        dict_append(image03_dict, 'stain_details', "")
-        dict_append(image03_dict, 'pipeline_stage', "")
-        dict_append(image03_dict, 'deconvolved', "")
-        dict_append(image03_dict, 'decon_software', "")
-        dict_append(image03_dict, 'decon_method', "")
-        dict_append(image03_dict, 'psf_type', "")
-        dict_append(image03_dict, 'psf_file', "")
-        dict_append(image03_dict, 'decon_snr', "")
-        dict_append(image03_dict, 'decon_iterations', "")
-        dict_append(image03_dict, 'micro_temmplate_name', "")
-        dict_append(image03_dict, 'in_stack', "")
-        dict_append(image03_dict, 'decon_template_name', "")
-        dict_append(image03_dict, 'stack', "")
-        dict_append(image03_dict, 'slices', "")
-        dict_append(image03_dict, 'slice_number', "")
-        dict_append(image03_dict, 'slice_thickness', "")
-        dict_append(image03_dict, 'type_of_microscopy', "")
-        dict_append(image03_dict, 'comments_misc', "")
-        dict_append(image03_dict, 'image_thumbnail_file', "")
-        dict_append(image03_dict, 'transmit_coil', "")
-        dict_append(image03_dict, 'image_history', "")
-        dict_append(image03_dict, 'qc_outcome', "")
-        dict_append(image03_dict, 'qc_description', "")
-        dict_append(image03_dict, 'qc_fail_quest_reason', "")
-        dict_append(image03_dict, 'decay_correction', "")
-        dict_append(image03_dict, 'frame_end_times', "")
-        dict_append(image03_dict, 'frame_end_unit', "")
-        dict_append(image03_dict, 'frame_start_times', "")
-        dict_append(image03_dict, 'frame_start_unit', "")
-        dict_append(image03_dict, 'pet_isotope', "")
-        dict_append(image03_dict, 'pet_tracer', "")
-        dict_append(image03_dict, 'time_diff_inject_to_image', "")
-        dict_append(image03_dict, 'time_diff_units', "")
-        dict_append(image03_dict, 'pulse_seq', "")
-        dict_append(image03_dict, 'slice_acquisition', "")
-        dict_append(image03_dict, 'software_preproc', "")
-        dict_append(image03_dict, 'study', "")
-        dict_append(image03_dict, 'week', "")
-        dict_append(image03_dict, 'experiment_description', "")
-        dict_append(image03_dict, 'year_mta', "")
-        dict_append(image03_dict, 'timepoint_label', "")
-        dict_append(image03_dict, 'aqi', "")
-        dict_append(image03_dict, 'fd_mean', "")
-        dict_append(image03_dict, 'dvars_std', "")
-        dict_append(image03_dict, 'tsnr', "")
-        dict_append(image03_dict, 'fetal_age', "")
-        dict_append(image03_dict, 'fetal_age_type', "")
-        dict_append(image03_dict, 'accession_number', "")
-        dict_append(image03_dict, 'ageyears', "")
-        dict_append(image03_dict, 'iti_onset', "")
-        dict_append(image03_dict, 'stim1', "")
-        dict_append(image03_dict, 'stim2', "")
-        dict_append(image03_dict, 'stim1_side', "")
-        dict_append(image03_dict, 'stim1_magnitude', "")
-        dict_append(image03_dict, 'stim2_magnitude', "")
-        dict_append(image03_dict, 'choice_side', "")
-        dict_append(image03_dict, 'computer_choice', "")
-        dict_append(image03_dict, 'stim1_outcome', "")
-        dict_append(image03_dict, 'session_fmri', "")
-        dict_append(image03_dict, 'choice_fmri', "")
-        dict_append(image03_dict, 'outcome_fmri', "")
-        dict_append(image03_dict, 'rt_fmri', "")
-        dict_append(image03_dict, 'task__version', "")
-        dict_append(image03_dict, 'block_sv', "")
-        dict_append(image03_dict, 'trial_num', "")
-        dict_append(image03_dict, 'options_onset', "")
-        dict_append(image03_dict, 'cue_onset', "")
-        dict_append(image03_dict, 'interval_onset', "")
-        dict_append(image03_dict, 'monitor_onset', "")
-        dict_append(image03_dict, 'session_det', "")
-        dict_append(image03_dict, 'gbc', "")
-        dict_append(image03_dict, 'vtca', "")
-        dict_append(image03_dict, 'vtcan', "")
-        dict_append(image03_dict, 'eventname', "")
-        dict_append(image03_dict, 'vendor', "")
-        dict_append(image03_dict, 'image_extent5', "")
-        dict_append(image03_dict, 'extent5_type', "")
-        dict_append(image03_dict, 'image_unit5', "")
-        dict_append(image03_dict, 'image_resolution5', "")
-        dict_append(image03_dict, 'excitation_wavelength', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'deviceserialnumber', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'procdate', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'visnum', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'manifest', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'emission_wavelingth', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'objective_magnification', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'objective_na', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'immersion', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'exposure_time', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'camera_sn', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'block_number', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'level', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'cut_thickness', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'stain', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'stain_details', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'pipeline_stage', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'deconvolved', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'decon_software', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'decon_method', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'psf_type', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'psf_file', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'decon_snr', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'decon_iterations', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'micro_temmplate_name', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'in_stack', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'decon_template_name', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'stack', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'slices', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'slice_number', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'slice_thickness', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'type_of_microscopy', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'comments_misc', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_thumbnail_file', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'transmit_coil', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_history', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'qc_outcome', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'qc_description', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'qc_fail_quest_reason', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'decay_correction', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'frame_end_times', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'frame_end_unit', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'frame_start_times', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'frame_start_unit', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'pet_isotope', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'pet_tracer', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'time_diff_inject_to_image', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'time_diff_units', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'pulse_seq', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'slice_acquisition', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'software_preproc', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'study', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'week', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'experiment_description', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'year_mta', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'timepoint_label', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'aqi', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'fd_mean', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'dvars_std', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'tsnr', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'fetal_age', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'fetal_age_type', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'accession_number', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'ageyears', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'iti_onset', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'stim1', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'stim2', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'stim1_side', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'stim1_magnitude', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'stim2_magnitude', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'choice_side', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'computer_choice', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'stim1_outcome', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'session_fmri', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'choice_fmri', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'outcome_fmri', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'rt_fmri', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'task__version', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'block_sv', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'trial_num', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'options_onset', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'cue_onset', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'interval_onset', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'monitor_onset', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'session_det', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'gbc', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'vtca', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'vtcan', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'eventname', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'vendor', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_extent5', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'extent5_type', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_unit5', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'image_resolution5', "")
+        dict_append(image03_dict,guid,lookup_fields,lookup_df, 'excitation_wavelength', "")
 
     image03_df = pd.DataFrame(image03_dict)
 
@@ -504,6 +543,16 @@ def main():
         "-e","--expid_mapping",
         metavar="EXPID_MAPPING",
         help="Path to a text file with experiment name to NDA experiment ID mapping.",
+        required=False)
+    parser.add_argument(
+        "--lookup_csv",
+        metavar="LOOKUP_CSV",
+        help="Path to a csv with data we need for the image03.csv, i.e. ndar_subject01.csv",
+        required=False)
+    parser.add_argument(
+        "--lookup_fields",
+        nargs='+',
+        help="List of column names to grab from the lookup csv. i.e. --lookup_fields interview_age sex",
         required=False)
     args = parser.parse_args()
 
