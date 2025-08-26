@@ -45,20 +45,20 @@ The BIDS task name should match the value associated with the "task-" key in the
 The NDA experiment ID number(s) are received from NDA after setting the study up through the NDA website [here](https://ndar.nih.gov/user/dashboard/collections.html).
 
 ## LOOKUP_CSV
-This can be any csv file, including something like the ndar_subject01.csv, with data
-you want to use to populate the image03.csv file. 
+This can be any csv file, including something like the `ndar_subject01.csv`, with data
+you want to use to populate the `image03.csv` file.
 
-This is useful in cases where the BIDS-derived data is missing or incorrect, such as 
+This is useful in cases where the BIDS-derived data is missing or incorrect, such as
 the calculation of interview_age in months, which is only approximated based on age in years
 from the BIDS data.
 
 ## LOOKUP_FIELDS
-If you pass a lookup csv, you need to specify which columns you want to use to populate 
-the image03.csv. The column names must match, so if you're trying to populate the interview_age
-column in the image03.csv, your lookup csv must have a column with the same name. 
+If you pass a lookup csv, you need to specify which columns you want to use to populate
+the `image03.csv`. The column names must match, so if you're trying to populate the "interview_age"
+column in the `image03.csv`, your lookup csv must have a column with the same name.
 
 You can pass more than one value, separated by spaces, like:
---lookup_fields interview_age gender
+`--lookup_fields interview_age gender`.
 
 ## Example outputs
 See [/examples](/examples)
