@@ -376,6 +376,13 @@ def run(args):
                                     arc_name = os.path.split(stim_file)[-1]
                                     zipf.write(stim_file, arc_name)
                         zipf.write(events_file, arch_name)
+                
+                    physio_files=glob(file.split("_bold")[0]+"*_physio*")
+                    for phys in physio_files:
+                        if os.path.exists(phys):
+                            phys_arch_name=os.path.split(phys)[-1]
+                            zipf.write(phys,phys_arch_name)
+
 
             dict_append(image03_dict,guid,lookup_fields,lookup_df, 'data_file2', os.path.join(args.output_directory, zip_name))
             dict_append(image03_dict,guid,lookup_fields,lookup_df, 'data_file2_type', "ZIP file with additional metadata from Brain Imaging "
