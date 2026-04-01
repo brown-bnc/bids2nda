@@ -11,6 +11,8 @@ from collections import OrderedDict
 from glob import glob
 import os
 import sys
+import datetime
+from dateutil.relativedelta import relativedelta
 
 import nibabel as nb
 import json
@@ -145,6 +147,11 @@ def run(args):
         expid_mapping = dict([line.split(" - ") for line in open(args.expid_mapping).read().split("\n") if line != ''])
     else:
         expid_mapping = False
+
+    if args.birthdates is not None:
+        birthdate_mapping = dict([line.split(" - ") for line in open(args.birthdates).read().split("\n") if line != ''])
+    else:
+        birthdate_mapping = False
     
     if (args.lookup_csv is not None) and (args.lookup_fields is not None): #if we have both a lookup csv and fields to grab
         #read lookup csv
@@ -234,10 +241,28 @@ def run(args):
                 break
 
         sdate = date.split("-")
-        ndar_date = sdate[1].zfill(2) + "/" + sdate[2].split("T")[0] + "/" + sdate[0]
+        int_month = sdate[1].zfill(2)
+        int_day = sdate[2].split("T")[0]
+        int_year = sdate[0]
+        ndar_date = int_month + "/" + int_day + "/" + int_year
         dict_append(image03_dict,guid,lookup_fields,lookup_df, 'interview_date', ndar_date)
 
-        interview_age = int(round(list(participants_df[participants_df.participant_id == "sub-" + sub].age)[0]*12, 0))
+        # If birthdate is provided, we can calculate exact age in months at the time of the session
+        if birthdate_mapping:
+            try:
+                birthdate = birthdate_mapping[bids_subject_id].split("/")
+                formatted_birthdate = datetime.date(int(birthdate[2]), int(birthdate[0]), int(birthdate[1]))
+                formatted_int_date = datetime.date(int(int_year), int(int_month), int(int_day))
+
+                diff = relativedelta(formatted_int_date, formatted_birthdate)
+                interview_age = diff.years * 12 + diff.months
+            except:
+                print(f"Birthdate for subject {bids_subject_id} cannot be parsed. Check MM/DD/YYYY format. "
+                      "Approximating age in months from participants.tsv.")      
+                interview_age = int(round(list(participants_df[participants_df.participant_id == "sub-" + sub].age)[0]*12, 0))
+        else:
+            interview_age = int(round(list(participants_df[participants_df.participant_id == "sub-" + sub].age)[0]*12, 0))
+
         dict_append(image03_dict,guid,lookup_fields,lookup_df, 'interview_age', interview_age)
 
         sex = list(participants_df[participants_df.participant_id == "sub-" + sub].sex)[0]
@@ -550,6 +575,15 @@ def main():
         "-e","--expid_mapping",
         metavar="EXPID_MAPPING",
         help="Path to a text file with experiment name to NDA experiment ID mapping.",
+        required=False)
+    parser.add_argument(
+        "-b","--birthdates",
+        metavar="BIRTHDATE",
+        help="Path to a text file with BIDS subject ID to birthdate (MM/DD/YYYY) mappings. i.e. 101 - 05/24/1990 \n"
+            "If provided, this will be used to calculate participant age at the time of each session, which is required by NDA. "
+            "Otherwise, approximate age in months will be calculated from the participants.tsv file. "
+            "Because birthdate is personally identifiable information, it will not be included in the output csv file or zipfiles. "
+            "Delete this mapping file after running the converter.",
         required=False)
     parser.add_argument(
         "--lookup_csv",

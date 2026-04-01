@@ -9,7 +9,7 @@ setup(
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # http://packaging.python.org/en/latest/tutorial.html#version
-    version='0.2.1',
+    version='0.3.0',
 
     description="Command line tool generating NDA compatible description from a Brain Imaging Data Structure "
                 "compatible dataset.",
@@ -60,7 +60,9 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     entry_points={
         'console_scripts': [
-            'bids2nda=bids2nda.main:main',
+            'mr_bids2nda=bids2nda.main:main',
+            'bids2nda=bids2nda.main:main', #retain bids2nda -> MR conversion for backwards compatibility
+            'eeg_bids2nda=bids2nda.convert_eeg:main',
         ],
     },
 )
