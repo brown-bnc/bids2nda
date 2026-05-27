@@ -2,6 +2,10 @@
 Extract NIMH Data Archive compatible metadata from Brain Imaging Data Structure (BIDS) compatible MR or EEG datasets. Adapted and extended from https://github.com/bids-standard/bids2nda to also:
 * zip and include stimulus files referenced in events.tsv files
 * populate experiment ID column using a BIDS taskname to NDA experiment ID mapping text file
+* calculate participant age at the time of each session
+* populate output csv with additional data from a lookup csv (e.g. ndar_subject01.csv)
+* zip and include physio data (heart rate & respiration) collected with fMRI data
+* use BrainVision EEG data to populate eeg_sub_files01.csv and eeg_details01.csv files
 
 ## Installation
 
