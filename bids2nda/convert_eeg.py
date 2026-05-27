@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 #
 
-# import modules used here -- sys is a very standard one
 from __future__ import print_function
 import argparse
 import csv
